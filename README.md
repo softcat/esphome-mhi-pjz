@@ -65,8 +65,12 @@ remote_receiver:
     mode:
       input: true
       pullup: true
-  tolerance: 55%          # generous: 160-bit frames drift; the decoder
-  buffer_size: 20kb       # classifies spaces by fixed threshold instead
+  tolerance: 55%          # spaces are classified by a fixed threshold, so
+                          # tolerance only affects the header
+  filter: 10us            # keep the short AGC-drooped bit marks (see below)
+  rmt_symbols: 384        # ESP32: fit the whole 160-bit frame in one capture
+  receive_symbols: 512
+  idle: 15ms
 
 climate:
   - platform: mhi_pjz
@@ -78,6 +82,21 @@ climate:
 Hardware notes: 940 nm IR LED on a transistor driver for TX; for RX use a
 native 38 kHz demodulator (TSOP34838; a TSOP34836 also works, a VS1838B does
 not — see `PROTOCOL.md`, receiver notes).
+
+### Receiver reliability (ESP32 / new RMT driver)
+
+The MHI frame is long (160 bits), and IR demodulators AGC-droop the bit
+**mark** across it — marks shrink from ~500 µs toward <150 µs. The decoder
+therefore **ignores mark length entirely** and reads the bit value from the
+following space (fixed 2500 µs threshold), so drooped marks decode fine.
+
+On the receiver side, keep `filter` low (`10us`) so those short marks are not
+dropped as glitches, and on ESP32 raise `rmt_symbols`/`receive_symbols` so the
+whole frame lands in a single RMT capture. Symptom if these are wrong: a few
+frames decode, then reception goes silent with nothing logged (the receiver is
+fine — malformed frames just fail the header/bit check silently). This became
+visible after ESPHome moved the ESP32 `remote_receiver` to the new IDF RMT
+driver, which measures the short marks more literally than the legacy one.
 
 ## Fan mode mapping
 
