@@ -209,8 +209,16 @@ bool MhiPjzClimate::on_receive(remote_base::RemoteReceiveData data) {
   uint32_t blocks[MHI_NBLOCKS] = {0};
   for (int blk = 0; blk < MHI_NBLOCKS; blk++) {
     for (int i = 0; i < 32; i++) {
-      if (!data.expect_mark(MHI_BIT_MARK))
-        return false;
+      // Bit mark: accept ANY mark length instead of expect_mark(MHI_BIT_MARK).
+      // The IR receiver's AGC droops the mark from ~500 us down to well under
+      // 150 us across this long (160-bit) frame, so a fixed-length check drops
+      // most real frames (silently, since expect_mark logs nothing). The bit
+      // value lives entirely in the following space, so the mark length is
+      // irrelevant — we only require that a mark is present and a space follows.
+      // Need both the mark (index) and its space (index+1) in the buffer.
+      if (!data.is_valid(1) || data.peek() <= 0)
+        return false;  // expected a mark here (any length)
+      data.advance();
       int32_t space = data.peek();  // current item: negative = space
       data.advance();
       if (space >= 0)
